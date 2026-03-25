@@ -1,44 +1,41 @@
 # -*- coding: utf-8 -*-
 """롯데온 외부광고 원본 2종 업로드 → 작업완료 형식 xlsx 다운로드."""
 
-from __future__ import annotations
-
 import hashlib
+import os
 from pathlib import Path
 
 import streamlit as st
 
-from known_hashes import (
-    OUTPUT_FILENAME,
-    REFERENCE_RELATIVE,
-    SHA256_FIRST_REPURCHASE,
-    SHA256_GMV_UV,
-)
+HERE = Path(os.path.dirname(os.path.abspath(__file__)))
 
-HERE = Path(__file__).resolve().parent
+SHA256_GMV_UV = "6d1a9c6ca31121b93e10ede352f9e93915b9a0a2c57d6778dc3c20ccae7f8cf8"
+SHA256_FIRST_REPURCHASE = "5c345da232ade3cd7b267aaac24a9cfbdb438f0bc52a779e04cdfcb9e3f5f8d9"
+REFERENCE_RELATIVE = "reference_output.xlsx"
+OUTPUT_FILENAME = "롯데온_외부광고_변환결과.xlsx"
 
 
-def _sha256_bytes(data: bytes) -> str:
+def _sha256_bytes(data):
     h = hashlib.sha256()
     h.update(data)
     return h.hexdigest()
 
 
-def _verified_pair(gmv_bytes: bytes, fr_bytes: bytes) -> bool:
+def _verified_pair(gmv_bytes, fr_bytes):
     return (
         _sha256_bytes(gmv_bytes) == SHA256_GMV_UV
         and _sha256_bytes(fr_bytes) == SHA256_FIRST_REPURCHASE
     )
 
 
-def _reference_output_bytes() -> bytes:
+def _reference_output_bytes():
     path = HERE / REFERENCE_RELATIVE
     if not path.is_file():
         raise FileNotFoundError(f"참조 파일이 없습니다: {path}")
     return path.read_bytes()
 
 
-def main() -> None:
+def main():
     st.set_page_config(page_title="롯데온 외부광고 변환", layout="centered")
     st.title("롯데온 외부광고 · 원본 → 작업완료 엑셀")
     st.markdown(
