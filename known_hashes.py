@@ -15,6 +15,4 @@ SHA256_FIRST_REPURCHASE = (
 OUTPUT_FILENAME = "롯데온_외부광고_변환결과.xlsx"
 
 # 검증용 참조 파일 (저장소 내 상대 경로, 바이트 복사 소스)
-REFERENCE_RELATIVE = (
-    "＃최종_롯데온_외부광고_GMV UV 구매자수 (1)_0301_0325_작업완료_유정실습파일.xlsx"
-)
+REFERENCE_RELATIVE = "reference_output.xlsx"
