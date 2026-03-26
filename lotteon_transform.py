@@ -220,6 +220,26 @@ def parse_first_repurchase_sheet(rows: List[Tuple[Any, ...]]) -> pd.DataFrame:
 # 통합
 # ---------------------------------------------------------------------------
 
+def _postprocess(df: pd.DataFrame) -> pd.DataFrame:
+    """후처리: 기타→PC, 합계 0 제거, 키 기준 피벗(합산)."""
+    df["유입매체구분"] = df["유입매체구분"].replace("기타", "PC")
+
+    df["UV"] = pd.to_numeric(df["UV"], errors="coerce").fillna(0).astype(int)
+    df["구매자수"] = pd.to_numeric(df["구매자수"], errors="coerce").fillna(0).astype(int)
+    df["판매매출"] = pd.to_numeric(df["판매매출"], errors="coerce").fillna(0).astype(int)
+
+    df = df[~((df["UV"] == 0) & (df["구매자수"] == 0) & (df["판매매출"] == 0))].copy()
+
+    key = ["날짜", "채널명", "채널상세", "유입매체구분", "첫구매여부(전체)"]
+    df = df.groupby(key, sort=False, as_index=False).agg(
+        UV=("UV", "sum"),
+        구매자수=("구매자수", "sum"),
+        판매매출=("판매매출", "sum"),
+    )
+
+    return df.reset_index(drop=True)
+
+
 def transform_workbooks(
     gmv_rows: List[Tuple[Any, ...]], fr_rows: List[Tuple[Any, ...]]
 ) -> pd.DataFrame:
@@ -228,7 +248,8 @@ def transform_workbooks(
     frames = [df for df in (df1, df2) if not df.empty]
     if not frames:
         return pd.DataFrame(columns=COLS)
-    return pd.concat(frames, ignore_index=True)
+    merged = pd.concat(frames, ignore_index=True)
+    return _postprocess(merged)
 
 
 def dataframe_to_xlsx_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
