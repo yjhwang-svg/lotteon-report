@@ -48,11 +48,15 @@ def main():
                 st.error(f"변환 중 오류가 발생했습니다: {e}")
                 return
 
+        min_d = df["날짜"].min()
+        max_d = df["날짜"].max()
+        fname = f"롯데온_외부광고_전일실적_{min_d.strftime('%m%d')}_{max_d.strftime('%m%d')}.xlsx"
+
         st.success(f"변환 완료 — 총 {len(df):,}행")
         st.download_button(
             label="결과 파일 다운로드 (.xlsx)",
             data=xlsx_bytes,
-            file_name="롯데온_외부광고_변환결과.xlsx",
+            file_name=fname,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
