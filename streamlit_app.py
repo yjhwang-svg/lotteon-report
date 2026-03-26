@@ -19,8 +19,7 @@ def main():
     st.set_page_config(page_title="롯데ON 내부데이터 변환", layout="centered")
     st.title("롯데ON 내부데이터 변환")
     st.markdown(
-        "아래 두 파일을 업로드한 뒤 **변환하기**를 누르면 `.xlsx` 파일을 받을 수 있습니다.  \n"
-        "동일한 기간의 파일을 넣어주세요."
+        "아래 두 파일을 업로드한 뒤 **변환하기**를 누르면 `.xlsx` 파일을 받을 수 있습니다."
     )
 
     f_gmv = st.file_uploader(
