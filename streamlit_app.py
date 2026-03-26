@@ -1,38 +1,18 @@
 # -*- coding: utf-8 -*-
-"""롯데온 외부광고 원본 2종 업로드 → 작업완료 형식 xlsx 다운로드."""
+"""롯데ON 내부데이터 변환 — 원본 2종 업로드 → 작업완료 xlsx 다운로드."""
 
-import hashlib
-import os
-from pathlib import Path
-
+import openpyxl
 import streamlit as st
 
-HERE = Path(os.path.dirname(os.path.abspath(__file__)))
-
-SHA256_GMV_UV = "6d1a9c6ca31121b93e10ede352f9e93915b9a0a2c57d6778dc3c20ccae7f8cf8"
-SHA256_FIRST_REPURCHASE = "5c345da232ade3cd7b267aaac24a9cfbdb438f0bc52a779e04cdfcb9e3f5f8d9"
-REFERENCE_RELATIVE = "reference_output.xlsx"
-OUTPUT_FILENAME = "롯데온_외부광고_변환결과.xlsx"
+from lotteon_transform import dataframe_to_xlsx_bytes, transform_workbooks
 
 
-def _sha256_bytes(data):
-    h = hashlib.sha256()
-    h.update(data)
-    return h.hexdigest()
-
-
-def _verified_pair(gmv_bytes, fr_bytes):
-    return (
-        _sha256_bytes(gmv_bytes) == SHA256_GMV_UV
-        and _sha256_bytes(fr_bytes) == SHA256_FIRST_REPURCHASE
-    )
-
-
-def _reference_output_bytes():
-    path = HERE / REFERENCE_RELATIVE
-    if not path.is_file():
-        raise FileNotFoundError(f"참조 파일이 없습니다: {path}")
-    return path.read_bytes()
+def _load_rows(uploaded_file):
+    """UploadedFile → list of row tuples."""
+    wb = openpyxl.load_workbook(uploaded_file, read_only=True, data_only=True)
+    rows = list(wb.active.iter_rows(values_only=True))
+    wb.close()
+    return rows
 
 
 def main():
@@ -59,29 +39,21 @@ def main():
             st.error("두 개의 xlsx 파일을 모두 업로드해 주세요.")
             return
 
-        gmv_bytes = f_gmv.getvalue()
-        fr_bytes = f_fr.getvalue()
+        with st.spinner("변환 중..."):
+            try:
+                gmv_rows = _load_rows(f_gmv)
+                fr_rows = _load_rows(f_fr)
+                df = transform_workbooks(gmv_rows, fr_rows)
+                xlsx_bytes = dataframe_to_xlsx_bytes(df)
+            except Exception as e:
+                st.error(f"변환 중 오류가 발생했습니다: {e}")
+                return
 
-        if not _verified_pair(gmv_bytes, fr_bytes):
-            st.error(
-                "업로드하신 파일이 등록된 검증 원본과 일치하지 않습니다. "
-                "작업완료 파일과 **완전히 동일한 결과**를 내려받으려면, "
-                "제공된 두 원본 파일을 수정 없이 그대로 업로드해 주세요. "
-                "(다른 기간·다른 사본은 SHA 값이 달라 동일 결과를 보장할 수 없습니다.)"
-            )
-            return
-
-        try:
-            out = _reference_output_bytes()
-        except FileNotFoundError as e:
-            st.error(str(e))
-            return
-
-        st.success("변환 완료. 아래에서 xlsx를 다운로드하세요.")
+        st.success(f"변환 완료 — 총 {len(df):,}행")
         st.download_button(
             label="결과 파일 다운로드 (.xlsx)",
-            data=out,
-            file_name=OUTPUT_FILENAME,
+            data=xlsx_bytes,
+            file_name="롯데온_외부광고_변환결과.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
