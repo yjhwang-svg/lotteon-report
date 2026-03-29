@@ -8,7 +8,8 @@ import pandas as pd
 
 import re
 
-COLS = ["날짜", "채널명", "채널상세", "유입매체구분", "UV", "구매자수", "판매매출", "첫구매여부(전체)"]
+COLS_INTERNAL = ["날짜", "채널명", "채널상세", "유입매체구분", "UV", "구매자수", "판매매출", "첫구매여부(전체)"]
+COLS = ["날짜", "채널명", "채널상세", "유입매체구분", "UV", "구매자수", "판매매출", "첫구매", "재구매"]
 
 EC_VALS = frozenset(("패션", "LIFE", "뷰티", "B2B", "미분류"))
 
@@ -79,7 +80,7 @@ def _parse_gmv_leaves(data_rows: List[Tuple[Any, ...]]):
 
 def parse_gmv_uv_sheet(rows: List[Tuple[Any, ...]]) -> pd.DataFrame:
     if len(rows) < 5:
-        return pd.DataFrame(columns=COLS)
+        return pd.DataFrame(columns=COLS_INTERNAL)
 
     row3 = rows[2]
     ds_list = _date_starts(row3)
@@ -183,7 +184,7 @@ def _parse_fr_leaves(data_rows: List[Tuple[Any, ...]]):
 
 def parse_first_repurchase_sheet(rows: List[Tuple[Any, ...]]) -> pd.DataFrame:
     if len(rows) < 5:
-        return pd.DataFrame(columns=COLS)
+        return pd.DataFrame(columns=COLS_INTERNAL)
 
     row3 = rows[2]
     ds_list = _date_starts(row3)
@@ -221,23 +222,38 @@ def parse_first_repurchase_sheet(rows: List[Tuple[Any, ...]]) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def _postprocess(df: pd.DataFrame) -> pd.DataFrame:
-    """후처리: 기타→PC, 합계 0 제거, 키 기준 피벗(합산)."""
+    """후처리: 기타→PC, 첫구매여부 피벗, 합계 0 제거, 키 기준 합산."""
     df["유입매체구분"] = df["유입매체구분"].replace("기타", "PC")
+    df["날짜"] = pd.to_datetime(df["날짜"])
 
-    df["UV"] = pd.to_numeric(df["UV"], errors="coerce").fillna(0).astype(int)
-    df["구매자수"] = pd.to_numeric(df["구매자수"], errors="coerce").fillna(0).astype(int)
-    df["판매매출"] = pd.to_numeric(df["판매매출"], errors="coerce").fillna(0).astype(int)
+    for c in ("UV", "구매자수", "판매매출"):
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
 
-    df = df[~((df["UV"] == 0) & (df["구매자수"] == 0) & (df["판매매출"] == 0))].copy()
+    key = ["날짜", "채널명", "채널상세", "유입매체구분"]
 
-    key = ["날짜", "채널명", "채널상세", "유입매체구분", "첫구매여부(전체)"]
-    df = df.groupby(key, sort=False, as_index=False).agg(
-        UV=("UV", "sum"),
-        구매자수=("구매자수", "sum"),
-        판매매출=("판매매출", "sum"),
+    base = df[df["첫구매여부(전체)"] == "없음"].groupby(key, sort=False, as_index=False).agg(
+        UV=("UV", "sum"), 구매자수=("구매자수", "sum"), 판매매출=("판매매출", "sum"),
     )
 
-    return df.reset_index(drop=True)
+    first = df[df["첫구매여부(전체)"] == "첫구매"].groupby(key, sort=False, as_index=False).agg(
+        첫구매=("구매자수", "sum"),
+    )
+
+    repurch = df[df["첫구매여부(전체)"] == "재구매"].groupby(key, sort=False, as_index=False).agg(
+        재구매=("구매자수", "sum"),
+    )
+
+    result = base.merge(first, on=key, how="left").merge(repurch, on=key, how="left")
+    result["첫구매"] = result["첫구매"].fillna(0).astype(int)
+    result["재구매"] = result["재구매"].fillna(0).astype(int)
+
+    all_zero = (
+        (result["UV"] == 0) & (result["구매자수"] == 0) & (result["판매매출"] == 0)
+        & (result["첫구매"] == 0) & (result["재구매"] == 0)
+    )
+    result = result[~all_zero].reset_index(drop=True)
+
+    return result[COLS]
 
 
 def transform_workbooks(
