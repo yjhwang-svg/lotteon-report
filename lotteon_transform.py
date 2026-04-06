@@ -270,150 +270,6 @@ def transform_workbooks(
     return _postprocess(merged)
 
 
-# ---------------------------------------------------------------------------
-# 트래픽속보 xlsx (UV만, 별도 양식)
-# ---------------------------------------------------------------------------
-
-def _traffic_date_columns(header_row: Sequence[Any]) -> List[int]:
-    """3행 헤더에서 합계 열 뒤의 날짜(datetime) 열 인덱스."""
-    return [i for i, x in enumerate(header_row) if isinstance(x, datetime)]
-
-
-def parse_traffic_bulletin_sheet(rows: List[Tuple[Any, ...]]) -> pd.DataFrame:
-    """
-    ★트래픽속보-리포트공유 형식 시트 → COLS와 동일 스키마.
-    - 3행: 몰·채널유형·채널·채널상세·유입매체·기준일자·합계·(날짜들…)
-    - 4행: 유입매체구분 / UV 라벨
-    - 5행부터: 계층 전진 채우기 후, 유입매체(E) 또는 기준일자(F)에 값이 있는 행을 leaf로 UV 집계.
-    구매·매출·첫·재구매는 0으로 둔다.
-    """
-    if len(rows) < 5:
-        return pd.DataFrame(columns=COLS)
-
-    header_row = list(rows[2])
-    ds_list = _traffic_date_columns(header_row)
-    if not ds_list:
-        raise ValueError("트래픽속보 파일에서 날짜 열을 찾지 못했습니다.")
-
-    data_rows = list(rows[4:])
-
-    def _apply_hierarchy(
-        r: Sequence[Any],
-        mall_ff: List[Optional[str]],
-        type_ff: List[Optional[str]],
-        channel_ff: List[Optional[str]],
-        detail_ff: List[Optional[str]],
-    ) -> None:
-        a0 = r[0] if len(r) > 0 else None
-        if a0 is not None and str(a0).strip() == "합계":
-            return
-        if a0 is not None and str(a0).strip():
-            mall_ff[0] = str(a0).strip()
-        if len(r) > 1 and r[1] is not None and str(r[1]).strip():
-            type_ff[0] = _decode_surrogates(str(r[1]).strip())
-            channel_ff[0] = None
-            detail_ff[0] = None
-        if len(r) > 2 and r[2] is not None and str(r[2]).strip():
-            channel_ff[0] = _decode_surrogates(str(r[2]).strip())
-            detail_ff[0] = None
-        if len(r) > 3 and r[3] is not None and str(r[3]).strip():
-            detail_ff[0] = _decode_surrogates(str(r[3]).strip())
-
-    mall_ff: List[Optional[str]] = [None]
-    type_ff: List[Optional[str]] = [None]
-    channel_ff: List[Optional[str]] = [None]
-    detail_ff: List[Optional[str]] = [None]
-
-    out: List[dict] = []
-
-    for i, row in enumerate(data_rows):
-        r = list(row)
-        need = max(ds_list[-1] + 1, 6)
-        while len(r) < need:
-            r.append(None)
-
-        if r[0] is not None and str(r[0]).strip() == "합계":
-            continue
-
-        _apply_hierarchy(r, mall_ff, type_ff, channel_ff, detail_ff)
-
-        e_set = len(r) > 4 and r[4] is not None and str(r[4]).strip()
-        f_set = len(r) > 5 and r[5] is not None and str(r[5]).strip()
-
-        if not e_set and not f_set:
-            continue
-
-        # 유입매체(E)와 기준일자(F)가 한 줄씩 쪼개진 경우: 상위(E만)는 하위(F) 행과 UV가 중복되므로 상위만 건너뜀.
-        if e_set and not f_set and i + 1 < len(data_rows):
-            nr = list(data_rows[i + 1])
-            while len(nr) < need:
-                nr.append(None)
-            n_e = len(nr) > 4 and nr[4] is not None and str(nr[4]).strip()
-            n_f = len(nr) > 5 and nr[5] is not None and str(nr[5]).strip()
-            if (not n_e) and n_f:
-                continue
-
-        if f_set:
-            media = str(r[5]).strip()
-        else:
-            media = str(r[4]).strip()
-
-        name = (channel_ff[0] or type_ff[0] or "").strip()
-        if not name:
-            continue
-
-        detail = (detail_ff[0] or "").strip()
-
-        for ds in ds_list:
-            dt = header_row[ds] if ds < len(header_row) else None
-            if not isinstance(dt, datetime):
-                continue
-            d = dt.date()
-            raw = r[ds] if ds < len(r) else None
-            uv = int(pd.to_numeric(raw, errors="coerce") or 0)
-            out.append(
-                {
-                    "날짜": d,
-                    "채널명": name,
-                    "채널상세": detail,
-                    "유입매체구분": media,
-                    "UV": uv,
-                    "구매자수": 0,
-                    "판매매출": 0,
-                    "첫구매": 0,
-                    "재구매": 0,
-                }
-            )
-
-    return pd.DataFrame(out, columns=COLS) if out else pd.DataFrame(columns=COLS)
-
-
-def _postprocess_traffic_only(df: pd.DataFrame) -> pd.DataFrame:
-    """트래픽 전용: 동일 키 합산, 전부 0인 행 제거."""
-    if df.empty:
-        return pd.DataFrame(columns=COLS)
-    work = df.copy()
-    work["날짜"] = pd.to_datetime(work["날짜"])
-    for c in ("UV", "구매자수", "판매매출", "첫구매", "재구매"):
-        work[c] = pd.to_numeric(work[c], errors="coerce").fillna(0).astype(int)
-    key = ["날짜", "채널명", "채널상세", "유입매체구분"]
-    result = work.groupby(key, sort=False, as_index=False).sum(numeric_only=True)
-    all_zero = (
-        (result["UV"] == 0)
-        & (result["구매자수"] == 0)
-        & (result["판매매출"] == 0)
-        & (result["첫구매"] == 0)
-        & (result["재구매"] == 0)
-    )
-    result = result[~all_zero].reset_index(drop=True)
-    return result[COLS]
-
-
-def transform_traffic_bulletin_workbook(rows: List[Tuple[Any, ...]]) -> pd.DataFrame:
-    raw = parse_traffic_bulletin_sheet(rows)
-    return _postprocess_traffic_only(raw)
-
-
 def dataframe_to_xlsx_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
@@ -471,17 +327,6 @@ def channel_names_from_index_dataframe(df: pd.DataFrame) -> frozenset[str]:
     return frozenset(n for n in names if n)
 
 
-def channel_names_from_index_upload(file_bytes: bytes, filename: str) -> frozenset[str]:
-    low = filename.lower()
-    if low.endswith(".csv"):
-        df = pd.read_csv(io.BytesIO(file_bytes), encoding="utf-8-sig", dtype=str)
-    elif low.endswith(".xlsx"):
-        df = pd.read_excel(io.BytesIO(file_bytes), dtype=str)
-    else:
-        raise ValueError("채널 인덱스는 .csv 또는 .xlsx 만 지원합니다.")
-    return channel_names_from_index_dataframe(df)
-
-
 def try_channel_names_from_published_google_sheet() -> Optional[frozenset[str]]:
     """
     시트를 「웹에 게시」한 경우(링크만으로 CSV 다운로드 가능) 인증 없이 읽는다.
@@ -531,18 +376,12 @@ def channel_names_from_google_sheet(service_account_info: Mapping[str, Any]) -> 
 
 
 def resolve_report_upload_channel_names(
-    uploaded_file: Optional[Any],
     streamlit_secrets: Optional[Mapping[str, Any]] = None,
 ) -> Tuple[frozenset[str], str]:
     """
     채널명 집합과, 어떤 경로로 읽었는지 짧은 설명을 반환한다.
-    우선순위: 업로드 파일 → 웹 게시 CSV → Secrets 서비스 계정 → 로컬 CSV
+    우선순위: 웹 게시 CSV → Secrets 서비스 계정 → 로컬 CSV
     """
-    if uploaded_file is not None:
-        data = uploaded_file.getvalue()
-        name = getattr(uploaded_file, "name", "upload")
-        return channel_names_from_index_upload(data, name), "업로드한 인덱스 파일"
-
     pub = try_channel_names_from_published_google_sheet()
     if pub:
         return pub, "구글 시트(웹 게시 CSV)"
