@@ -18,10 +18,7 @@ def _load_rows(uploaded_file):
 def main():
     st.set_page_config(page_title="롯데ON 내부데이터 변환", layout="centered")
     st.title("롯데ON 내부데이터 변환")
-    st.markdown(
-        "아래 두 파일을 업로드한 뒤 **변환하기**를 누르면 **작업완료 롱포맷** `.xlsx` 한 개를 "
-        "다운로드할 수 있습니다."
-    )
+    st.markdown("아래 두 파일을 업로드한 뒤 변환하기를 눌러주세요.")
 
     f_gmv = st.file_uploader(
         "1) GMV · UV · 구매자수 원본 (xlsx)",
