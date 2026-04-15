@@ -156,7 +156,7 @@ def _parse_fr_leaves(data_rows: List[Tuple[Any, ...]]):
             media_ff = str(r[6]).strip()
         elif r[7] is not None and str(r[7]).strip():
             level = 2
-        elif r[8] is not None and str(r[8]).strip() in EC_VALS:
+        elif r[8] is not None and str(r[8]).strip():
             level = 3
         else:
             continue
