@@ -121,15 +121,14 @@ def parse_gmv_uv_sheet(rows: List[Tuple[Any, ...]]) -> pd.DataFrame:
 
 def _parse_fr_leaves(data_rows: List[Tuple[Any, ...]]):
     """
-    계층 구조에서 leaf 행만 추출.
-    level 1 = col7(유입매체구분), level 2 = col8(유입매체), level 3 = col9(EC영업실).
-    leaf = 다음 후보 행이 자신보다 깊지 않은 행.
+    유입매체구분(col[6]) 행을 직접 사용한다.
+    이 행은 하위 레벨(유입매체·EC영업실)의 합계를 이미 포함하므로
+    leaf 감지 없이 안정적으로 정합성이 보장된다.
     """
-    candidates = []
+    results = []
     name_ff = None
     detail_ff = None
     flag_ff = None
-    media_ff = None
 
     for row in data_rows:
         r = list(row)
@@ -138,50 +137,28 @@ def _parse_fr_leaves(data_rows: List[Tuple[Any, ...]]):
             name_ff = _decode_surrogates(str(r[3]))
             detail_ff = None
             flag_ff = None
-            media_ff = None
         if r[4] is not None and str(r[4]).strip():
             detail_ff = _decode_surrogates(str(r[4]))
         if r[5] in ("첫구매", "재구매"):
             flag_ff = str(r[5])
-            media_ff = None
 
         if flag_ff not in ("첫구매", "재구매"):
             continue
         if name_ff is None or detail_ff is None:
             continue
 
-        level = 0
-        if r[6] is not None and str(r[6]).strip():
-            level = 1
-            media_ff = str(r[6]).strip()
-        elif r[7] is not None and str(r[7]).strip():
-            level = 2
-        elif r[8] is not None and str(r[8]).strip():
-            level = 3
-        else:
+        if r[6] is None or not str(r[6]).strip():
             continue
+        media = str(r[6]).strip()
 
-        if media_ff is None:
-            continue
-
-        candidates.append((level, name_ff, detail_ff, flag_ff, media_ff, r))
-
-    leaves = []
-    for i, cand in enumerate(candidates):
-        is_leaf = True
-        if i + 1 < len(candidates):
-            if candidates[i + 1][0] > cand[0]:
-                is_leaf = False
-        if not is_leaf:
-            continue
-        r = cand[5]
         total_sales = r[9] if len(r) > 9 else None
         total_buyers = r[10] if len(r) > 10 else None
         if (total_sales is None or total_sales == 0) and (total_buyers is None or total_buyers == 0):
             continue
-        leaves.append(cand[1:])  # (name, detail, flag, media, row)
 
-    return leaves
+        results.append((name_ff, detail_ff, flag_ff, media, r))
+
+    return results
 
 
 def parse_first_repurchase_sheet(rows: List[Tuple[Any, ...]]) -> pd.DataFrame:
