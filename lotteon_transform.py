@@ -222,9 +222,9 @@ def _postprocess(df: pd.DataFrame) -> pd.DataFrame:
         재구매=("구매자수", "sum"),
     )
 
-    result = base.merge(first, on=key, how="left").merge(repurch, on=key, how="left")
-    result["첫구매"] = result["첫구매"].fillna(0).astype(int)
-    result["재구매"] = result["재구매"].fillna(0).astype(int)
+    result = base.merge(first, on=key, how="outer").merge(repurch, on=key, how="outer")
+    for c in ("UV", "구매자수", "판매매출", "첫구매", "재구매"):
+        result[c] = result[c].fillna(0).astype(int)
 
     all_zero = (
         (result["UV"] == 0) & (result["구매자수"] == 0) & (result["판매매출"] == 0)
