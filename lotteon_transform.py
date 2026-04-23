@@ -203,7 +203,7 @@ def parse_first_repurchase_sheet(rows: List[Tuple[Any, ...]]) -> pd.DataFrame:
 def _postprocess(df: pd.DataFrame) -> pd.DataFrame:
     """후처리: 기타→PC, 첫구매여부 피벗, 합계 0 제거, 키 기준 합산."""
     df["유입매체구분"] = df["유입매체구분"].replace("기타", "PC")
-    df["날짜"] = pd.to_datetime(df["날짜"]).dt.normalize()
+    df["날짜"] = pd.to_datetime(df["날짜"]).dt.strftime("%Y-%m-%d")
     for c in ("채널명", "채널상세"):
         df[c] = df[c].astype(str).str.strip()
 
