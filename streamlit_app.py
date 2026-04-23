@@ -50,9 +50,9 @@ def main():
             st.warning("변환 결과가 비어 있습니다. 원본 xlsx 형식을 확인해 주세요.")
             return
 
-        min_d = df["날짜"].min()
-        max_d = df["날짜"].max()
-        tag = f"{min_d.strftime('%m%d')}_{max_d.strftime('%m%d')}"
+        min_d = str(df["날짜"].min())
+        max_d = str(df["날짜"].max())
+        tag = f"{min_d[5:7]}{min_d[8:10]}_{max_d[5:7]}{max_d[8:10]}"
         fname = f"롯데온_외부광고_전일실적_{tag}.xlsx"
 
         st.success(f"변환 완료 — **{len(df):,}**행")
