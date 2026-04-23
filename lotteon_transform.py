@@ -203,7 +203,9 @@ def parse_first_repurchase_sheet(rows: List[Tuple[Any, ...]]) -> pd.DataFrame:
 def _postprocess(df: pd.DataFrame) -> pd.DataFrame:
     """후처리: 기타→PC, 첫구매여부 피벗, 합계 0 제거, 키 기준 합산."""
     df["유입매체구분"] = df["유입매체구분"].replace("기타", "PC")
-    df["날짜"] = pd.to_datetime(df["날짜"])
+    df["날짜"] = pd.to_datetime(df["날짜"]).dt.normalize()
+    for c in ("채널명", "채널상세"):
+        df[c] = df[c].astype(str).str.strip()
 
     for c in ("UV", "구매자수", "판매매출"):
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
@@ -249,7 +251,7 @@ def transform_workbooks(
 
 def dataframe_to_xlsx_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
     buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+    with pd.ExcelWriter(buf, engine="openpyxl", date_format="YYYY-MM-DD") as writer:
         df.to_excel(writer, index=False, sheet_name=sheet_name)
     return buf.getvalue()
 
